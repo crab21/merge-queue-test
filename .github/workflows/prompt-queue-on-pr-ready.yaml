@@ -64,7 +64,12 @@ jobs:
           let prNumber = echo ${{ github.event.pull_request.number }}
           nu $env.PR_NU_PATH checkAllChecks $prNumber ({ 
                 skipStepNames: ["checkHasNotMergeLabel"],
-                containStepNames: ["checkApproval", "checkPROpen"]
+                containStepNames: ["checkHasAutoMergeLabel", "checkPROpen"]
+              } | to json )
+
+              
+          nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+                containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval"]
               } | to json )
           echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
 

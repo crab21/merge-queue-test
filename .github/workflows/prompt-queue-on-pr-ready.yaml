@@ -62,15 +62,35 @@ jobs:
           use std log
           log info "pr approval"
           let prNumber = echo ${{ github.event.pull_request.number }}
-          nu $env.PR_NU_PATH checkAllChecks $prNumber ({ 
-                skipStepNames: ["checkHasNotMergeLabel"],
-                containStepNames: ["checkHasAutoMergeLabel", "checkPROpen"]
-              } | to json )
 
               
-          nu $env.PR_NU_PATH checkAllChecks $prNumber ({
-                containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval"]
-              } | to json )
+          let autoMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+                containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval","checkHasAutoMergeLabel"]
+              } | to json ) } | complete
+          print $autoMergeLabel
+          if ($autoMergeLabel | get exit_code) == 255 {
+            exit 1
+          }
+          if ($autoMergeLabel | get exit_code) != 1 {
+            echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
+            exit 0
+          }
+
+          #  add to queue
+          log info $"PR #($prNumber) has auto merge label, skipping."
+          nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
+          log info $"Added PR #($prNumber) to the queue."
+
+          let haveRunsInProcess = gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"   $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/runs?per_page=100" | from json | get -i workflow_runs | default [] | where {|x| $x.status == 'waiting' or $x.status == 'queued' or $x.status == 'in_progress' or $x.status == 'pending'}
+
+          if (($haveRunsInProcess | length) > 1) {
+            log warning "There are still runs in process, not trigger pop queue"
+            return
+          }
+          # pop queue
+          log info $"Continue ........Triggering pop queue workflow with ref: `${{env.TRIGGER_BRANCH_NAME}}`"
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/dispatches" -f "ref=${{env.TRIGGER_BRANCH_NAME}}"
+
           echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
 
       - name: Prompt user to comment /queue

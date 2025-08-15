@@ -13,6 +13,7 @@ env:
   GH_USER: crab21
   SLACK_MERGE_QUEUE_CHANNEL: "C09AGCDGMBP"
   MergeQueueFileName: "merge-queue.yaml"
+  GH_USER_TOKEN: ${{ secrets.GH_USER_TOKEN }}
 jobs:
   prompt-queue:
     if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'

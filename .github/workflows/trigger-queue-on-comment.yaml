@@ -12,6 +12,7 @@ env:
   GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
   SLACK_MERGE_QUEUE_CHANNEL: "C09AGCDGMBP"
   MergeQueueFileName: "merge-queue.yaml"
+  GH_USER_TOKEN: ${{ secrets.GH_USER_TOKEN }}
 
 jobs:
   trigger-queue:

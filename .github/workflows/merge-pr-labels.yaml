@@ -2,6 +2,7 @@ name: merge pr labels event
 run-name: "merge pr labels event, PR number:, commenter: ${{ github.actor }}"
 on:
   workflow_run:
+    workflows: ["Merge Gatekeeper"]
     types: [completed]
 
 env:

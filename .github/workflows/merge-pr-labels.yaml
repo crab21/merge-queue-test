@@ -1,5 +1,5 @@
 name: merge pr labels event
-run-name: "merge pr labels event, PR number: ${{ github.event.pull_request.number }}, commenter: ${{ github.actor }}"
+run-name: "merge pr labels event, PR number:, commenter: ${{ github.actor }}"
 on:
   workflow_run:
     types: [completed]
@@ -17,7 +17,7 @@ env:
 jobs:
   labeled-event:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action == 'labeled'
+    if: github.event_name == 'pull_request'
     steps:
       - uses: hustcer/setup-nu@main
         with:

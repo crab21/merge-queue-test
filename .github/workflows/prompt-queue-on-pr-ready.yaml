@@ -14,6 +14,7 @@ env:
   SLACK_MERGE_QUEUE_CHANNEL: "C09AGCDGMBP"
   MergeQueueFileName: "merge-queue.yaml"
   GH_USER_TOKEN: ${{ secrets.GH_USER_TOKEN }}
+  SLACK_TOKEN: ${{ secrets.SLACK_API_TOKEN_IT_INTEGRATION_PARALLEL }}
 jobs:
   prompt-queue:
     if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'

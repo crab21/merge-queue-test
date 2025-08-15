@@ -143,6 +143,7 @@ jobs:
           # {name: $checkMergeGateKeeperKey, cfunc: $checkActionRunsOfGateKeeper},
           # {name: $checkApprovalKey, cfunc: $checkApproval}
           let prs = open ${{ github.event_path}}
+          print $prs
           let prNumbers = $prs | get -i pull_requests | default [] | get -i number
           if ($prNumbers | length) == 0 {
             log warning "No PR number found in the workflow run event."

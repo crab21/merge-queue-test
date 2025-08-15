@@ -116,8 +116,7 @@ jobs:
         shell: nu {0}
         run: |
           use std
-          let a = ^toJSON(${{ github.event.workflow_run.pull_requests }})
-          print $a
+          print $env
       #     # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
       #     git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
       #     let currPwd = pwd

@@ -142,8 +142,12 @@ jobs:
           # {name: $checkConflictKey, cfunc: $checkHaveConflict},
           # {name: $checkMergeGateKeeperKey, cfunc: $checkActionRunsOfGateKeeper},
           # {name: $checkApprovalKey, cfunc: $checkApproval}
-
-          let prNumber = echo ${{ github.event.pull_request.number }}
+          let prs = ${{ github.event.workflow_run.pull_requests }} | from json | get -i number | default []
+          let prNumber = $prs | first
+          if ($prs | length) == 0 {
+            log warning "No PR number found in the workflow run event."
+            exit 0
+          }
 
           let autoMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
                 containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval","checkHasAutoMergeLabel"]

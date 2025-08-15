@@ -190,7 +190,7 @@ jobs:
         run: |
           use std log
           let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
-          if $prNumber | is-empty {
+          if ($prNumber | is-empty) {
             log info "No PR number found, skip check auto-merge label"
             exit 0
           }

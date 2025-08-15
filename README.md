@@ -17,6 +17,7 @@ gi
 2025-08-15 11:51:23
 2025-08-15 12:59:06
 2025-08-15 17:25:18
+2025-08-15 17:44:18
           let prNumber = echo ${{ github.event.issue.number }}
           nu pr.nu checkAllChecks $prNumber ({
                 rulesPath: "/Users/k/wk/work_note/gha/merge-queue/pr-rules.yaml", 

@@ -1,8 +1,8 @@
 name: merge pr labels event
 run-name: "merge pr labels event, PR number: ${{ github.event.pull_request.number }}, commenter: ${{ github.actor }}"
 on:
-  pull_request:
-    types: [labeled,unlabeled]
+  workflow_run:
+    types: [completed]
 
 env:
   TRIGGER_BRANCH_NAME: main
@@ -26,139 +26,142 @@ jobs:
         shell: nu {0}
         run: |
           use std log
-          use std
-          # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
-          git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
-          let currPwd = pwd
-          cd /tmp/tools
-          git sparse-checkout init --cone o+e> (std null-device)
-          git sparse-checkout set scripts/merge-queue o+e> (std null-device)
-          git checkout main o+e>| save -f /tmp/tools.log
-          ^ls -allh scripts/merge-queue
-          cd $currPwd
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TRIGGER_BRANCH_NAME}}
-      - name: check is expected label
-        shell: nu {0}
-        id: check-all
+          let objs = $env.GITHUB_EVENT_WORKFLOW_RUN
+          print $objs
 
-        run: |
-          use std log
-          log info "pr approval"
-          # {name: $checkPROpenKey, cfunc: $checkPROpen},
-          # {name: $checkHasNotMergeLabelKey, cfunc: $checkHasNotMergeLabel},
-          # {name: $checkNeedUpdateKey, cfunc: $checkUpdate},
-          # {name: $checkConflictKey, cfunc: $checkHaveConflict},
-          # {name: $checkMergeGateKeeperKey, cfunc: $checkActionRunsOfGateKeeper},
-          # {name: $checkApprovalKey, cfunc: $checkApproval}
+  #         use std
+  #         # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+  #         git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+  #         let currPwd = pwd
+  #         cd /tmp/tools
+  #         git sparse-checkout init --cone o+e> (std null-device)
+  #         git sparse-checkout set scripts/merge-queue o+e> (std null-device)
+  #         git checkout main o+e>| save -f /tmp/tools.log
+  #         ^ls -allh scripts/merge-queue
+  #         cd $currPwd
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ env.TRIGGER_BRANCH_NAME}}
+  #     - name: check is expected label
+  #       shell: nu {0}
+  #       id: check-all
 
-          let prNumber = echo ${{ github.event.pull_request.number }}
-          let notMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
-                containStepNames: ["checkPROpen", "checkHasNotMergeLabel"]
-              } | to json ) } | complete
-          print $notMergeLabel
-          if ($notMergeLabel | get exit_code) == 2 {
-            #  remove the prNumber from the queue
-            log info $"PR #($prNumber) has not merge label, skipping."
-            $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
-            log info $"drop pr #($prNumber) from queue"
-            let runsLink = "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
-            let body = {"number": $prNumber,"ghType":2, "runs_link": $runsLink, resource: "labeled"} | to json -r
-            export-env {
-              $env.REPOSITORY = echo ${{ github.repository }}
-              $env.BRANCH_NAME = "gh-pr"
-              $env.DL_PATH = "pr/pr.yaml"
-              $env.MAX_RETRY = 20
-            }
-            nu $env.PR_NU_PATH modifyQueue $body
-            exit 0
-          }
+  #       run: |
+  #         use std log
+  #         log info "pr approval"
+  #         # {name: $checkPROpenKey, cfunc: $checkPROpen},
+  #         # {name: $checkHasNotMergeLabelKey, cfunc: $checkHasNotMergeLabel},
+  #         # {name: $checkNeedUpdateKey, cfunc: $checkUpdate},
+  #         # {name: $checkConflictKey, cfunc: $checkHaveConflict},
+  #         # {name: $checkMergeGateKeeperKey, cfunc: $checkActionRunsOfGateKeeper},
+  #         # {name: $checkApprovalKey, cfunc: $checkApproval}
 
-
-          let autoMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
-                containStepNames: ["checkPROpen", "checkHasAutoMergeLabel"]
-              } | to json ) } | complete
-          print $autoMergeLabel
-          if ($autoMergeLabel | get exit_code) == 1 {
-            #  remove the prNumber from the queue
-            log info $"PR #($prNumber) has auto merge label, skipping."
-            nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
-            log info "Added PR #($prNumber) to the queue."
-            let haveRunsInProcess = gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"   $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/runs?per_page=100" | from json | get -i workflow_runs | default [] | where {|x| $x.status == 'waiting' or $x.status == 'queued' or $x.status == 'in_progress' or $x.status == 'pending'}
-
-            if (($haveRunsInProcess | length) > 1) {
-              log warning "There are still runs in process, not trigger pop queue"
-              return
-            }
-            # pop queue
-            log info $"Continue ........Triggering pop queue workflow with ref: `${{env.TRIGGER_BRANCH_NAME}}`"
-            gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/dispatches" -f "ref=${{env.TRIGGER_BRANCH_NAME}}"
-            exit 0
-          }
+  #         let prNumber = echo ${{ github.event.pull_request.number }}
+  #         let notMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+  #               containStepNames: ["checkPROpen", "checkHasNotMergeLabel"]
+  #             } | to json ) } | complete
+  #         print $notMergeLabel
+  #         if ($notMergeLabel | get exit_code) == 2 {
+  #           #  remove the prNumber from the queue
+  #           log info $"PR #($prNumber) has not merge label, skipping."
+  #           $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
+  #           log info $"drop pr #($prNumber) from queue"
+  #           let runsLink = "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+  #           let body = {"number": $prNumber,"ghType":2, "runs_link": $runsLink, resource: "labeled"} | to json -r
+  #           export-env {
+  #             $env.REPOSITORY = echo ${{ github.repository }}
+  #             $env.BRANCH_NAME = "gh-pr"
+  #             $env.DL_PATH = "pr/pr.yaml"
+  #             $env.MAX_RETRY = 20
+  #           }
+  #           nu $env.PR_NU_PATH modifyQueue $body
+  #           exit 0
+  #         }
 
 
-  unlabeled-event:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' &&  github.event.action == 'unlabeled'
-    steps:
-      - uses: hustcer/setup-nu@main
-        with:
-          version: "0.105.1"
-      - name: checkout tools
-        shell: nu {0}
-        run: |
-          use std log
-          use std
-          # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
-          git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
-          let currPwd = pwd
-          cd /tmp/tools
-          git sparse-checkout init --cone o+e> (std null-device)
-          git sparse-checkout set scripts/merge-queue o+e> (std null-device)
-          git checkout main o+e>| save -f /tmp/tools.log
-          ^ls -allh scripts/merge-queue
-          cd $currPwd
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TRIGGER_BRANCH_NAME}}
-      - name: checkout tools
-        shell: nu {0}
-        run: |
-          use std log
-          let label =  echo ${{ github.event.label.name }}
-          print ($label | to json -r)
+  #         let autoMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+  #               containStepNames: ["checkPROpen", "checkHasAutoMergeLabel"]
+  #             } | to json ) } | complete
+  #         print $autoMergeLabel
+  #         if ($autoMergeLabel | get exit_code) == 1 {
+  #           #  remove the prNumber from the queue
+  #           log info $"PR #($prNumber) has auto merge label, skipping."
+  #           nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
+  #           log info "Added PR #($prNumber) to the queue."
+  #           let haveRunsInProcess = gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"   $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/runs?per_page=100" | from json | get -i workflow_runs | default [] | where {|x| $x.status == 'waiting' or $x.status == 'queued' or $x.status == 'in_progress' or $x.status == 'pending'}
 
-          let prNumber = echo ${{ github.event.pull_request.number }}
-          let notMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
-                containStepNames: ["checkPROpen", "checkHasNotMergeLabel"]
-              } | to json ) } | complete
-          print $notMergeLabel
-          if ($notMergeLabel | get exit_code) == 2 {
-            #  remove the prNumber from the queue
-            log info $"PR #($prNumber) has not merge label, skipping."
-            exit 0
-          }
+  #           if (($haveRunsInProcess | length) > 1) {
+  #             log warning "There are still runs in process, not trigger pop queue"
+  #             return
+  #           }
+  #           # pop queue
+  #           log info $"Continue ........Triggering pop queue workflow with ref: `${{env.TRIGGER_BRANCH_NAME}}`"
+  #           gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" $"/repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/dispatches" -f "ref=${{env.TRIGGER_BRANCH_NAME}}"
+  #           exit 0
+  #         }
 
-          let autoMergeLen = open .github/workflows/scripts/pr-rules.yaml | get -i auto_merge_labels | where {|x| $x == $label}  | length
-          if ($autoMergeLen > 0) {
-            #  remove the prNumber from the queue
-            log info $"PR #($prNumber) has auto merge label, skipping."
 
-            #  remove the prNumber from the queue
-            log info $"PR #($prNumber) has not merge label, skipping."
-            $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
-            log info $"drop pr #($prNumber) from queue"
-            let runsLink = "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
-            let body = {"number": $prNumber,"ghType":2, "runs_link": $runsLink, resource: "labeled"} | to json -r
-            export-env {
-              $env.REPOSITORY = echo ${{ github.repository }}
-              $env.BRANCH_NAME = "gh-pr"
-              $env.DL_PATH = "pr/pr.yaml"
-              $env.MAX_RETRY = 20
-            }
-            nu $env.PR_NU_PATH modifyQueue $body
-            exit 0
-          }
+  # unlabeled-event:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request' &&  github.event.action == 'unlabeled'
+  #   steps:
+  #     - uses: hustcer/setup-nu@main
+  #       with:
+  #         version: "0.105.1"
+  #     - name: checkout tools
+  #       shell: nu {0}
+  #       run: |
+  #         use std log
+  #         use std
+  #         # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+  #         git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+  #         let currPwd = pwd
+  #         cd /tmp/tools
+  #         git sparse-checkout init --cone o+e> (std null-device)
+  #         git sparse-checkout set scripts/merge-queue o+e> (std null-device)
+  #         git checkout main o+e>| save -f /tmp/tools.log
+  #         ^ls -allh scripts/merge-queue
+  #         cd $currPwd
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ env.TRIGGER_BRANCH_NAME}}
+  #     - name: checkout tools
+  #       shell: nu {0}
+  #       run: |
+  #         use std log
+  #         let label =  echo ${{ github.event.label.name }}
+  #         print ($label | to json -r)
+
+  #         let prNumber = echo ${{ github.event.pull_request.number }}
+  #         let notMergeLabel = do { nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+  #               containStepNames: ["checkPROpen", "checkHasNotMergeLabel"]
+  #             } | to json ) } | complete
+  #         print $notMergeLabel
+  #         if ($notMergeLabel | get exit_code) == 2 {
+  #           #  remove the prNumber from the queue
+  #           log info $"PR #($prNumber) has not merge label, skipping."
+  #           exit 0
+  #         }
+
+  #         let autoMergeLen = open .github/workflows/scripts/pr-rules.yaml | get -i auto_merge_labels | where {|x| $x == $label}  | length
+  #         if ($autoMergeLen > 0) {
+  #           #  remove the prNumber from the queue
+  #           log info $"PR #($prNumber) has auto merge label, skipping."
+
+  #           #  remove the prNumber from the queue
+  #           log info $"PR #($prNumber) has not merge label, skipping."
+  #           $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
+  #           log info $"drop pr #($prNumber) from queue"
+  #           let runsLink = "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+  #           let body = {"number": $prNumber,"ghType":2, "runs_link": $runsLink, resource: "labeled"} | to json -r
+  #           export-env {
+  #             $env.REPOSITORY = echo ${{ github.repository }}
+  #             $env.BRANCH_NAME = "gh-pr"
+  #             $env.DL_PATH = "pr/pr.yaml"
+  #             $env.MAX_RETRY = 20
+  #           }
+  #           nu $env.PR_NU_PATH modifyQueue $body
+  #           exit 0
+  #         }

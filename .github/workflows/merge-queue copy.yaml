@@ -1,0 +1,253 @@
+name: Merge Queue
+on:
+  workflow_dispatch:
+
+env:
+  TRIGGER_BRANCH_NAME: master
+  PR_NU_PATH: /tmp/tools/scripts/merge-queue/pr.nu
+  GH_USER: crab21
+  SLACK_TOKEN: ${{ secrets.SLACK_API_TOKEN_IT_INTEGRATION_PARALLEL }}
+  GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+  SLACK_MERGE_QUEUE_CHANNEL: "C09AGCDGMBP"
+  MergeQueueFileName: "merge-queue.yaml"
+  GH_USER_TOKEN: ${{ secrets.GH_USER_TOKEN }}
+jobs:
+  update-branch:
+    concurrency:
+      group: merge-queue
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hustcer/setup-nu@main
+        with:
+          version: "0.105.1"
+      - name: checkout tools
+        shell: nu {0}
+        run: |
+          use std log
+          use std
+          # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+          git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://peiyuanwang0:($env.GH_USER_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log
+          let currPwd = pwd
+          cd /tmp/tools
+          git sparse-checkout init --cone o+e> (std null-device)
+          git sparse-checkout set scripts/merge-queue o+e> (std null-device)
+          git checkout main o+e>| save -f /tmp/tools.log
+          ^ls -allh scripts/merge-queue
+          cd $currPwd
+      - name: DL `pr/pr.yaml`
+        shell: nu {0}
+        id: dl-pr-info
+        run: |
+          use std log
+          ^pwd
+          export-env {
+            $env.BRANCH_NAME = "gh-pr"
+            $env.DL_PATH = "pr/pr.yaml"
+            $env.REPOSITORY = ^echo ${{ github.repository }}
+          }
+          ^ls -allh
+          let prResultPath = nu $env.PR_NU_PATH DLRemoteFileExport true
+          log info ($prResultPath | to json -r)
+          ^cat $prResultPath
+          let prPath = open $prResultPath | from json | get -i tmpPath
+          let prInfo = open $prPath | from yaml | default []
+          if (($prInfo | length) == 0) {
+            log error "No PRs in queue."
+            exit 1
+          }
+
+          let prNumber = $prInfo | sort-by queueTime | first | get -i number
+          log info ($prInfo | to json -r)
+          ^pwd
+          echo $"prNumber=($prNumber)" |  save --append $env.GITHUB_OUTPUT
+      - name: add `merge queue` link to PR comment
+        shell: nu {0}
+
+        run: |
+          use std log
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          let body = '✅ [Merge Queue](https://github.com/${{github.repository}}/actions/runs/${{github.run_id}})'
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" $"/repos/($env.GITHUB_REPOSITORY)/issues/($prNumber)/comments" -f $"body=($body)"
+
+      # do not modify this step name, it is used in other workflows
+      - name: drop pr from queue ${{ steps.dl-pr-info.outputs.prNumber }}
+        if: steps.dl-pr-info.outputs.prNumber != ''
+        shell: nu {0}
+
+        run: |
+          use std log
+
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
+          log info $"drop pr #($prNumber) from queue"
+          let runsLink = "https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+          let body = {"number": $prNumber,"ghType":2, "runs_link": $runsLink} | to json -r
+          export-env {
+            $env.REPOSITORY = echo ${{ github.repository }}
+            $env.BRANCH_NAME = "gh-pr"
+            $env.DL_PATH = "pr/pr.yaml"
+            $env.MAX_RETRY = 20
+          }
+          nu $env.PR_NU_PATH modifyQueue $body
+
+      - name: get head ref
+        if: steps.dl-pr-info.outputs.prNumber != ''
+        shell: nu {0}
+        id: get-head-ref
+
+        run: |
+          use std log
+          ^pwd
+          ^ls -allh
+
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          let pullRequest = gh api --paginate -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"   $"/repos/${{ github.repository }}/pulls/($prNumber)" | from json
+
+          let currentRef = $pullRequest | get -i head | get -i ref | default "" | into string
+          let baseRef = $pullRequest | get -i base | get -i ref | default "" | into string
+          if ($currentRef | is-empty) {
+            log error "No head ref found for PR #($prNumber)."
+            exit 1
+          }
+          echo $"currentRef=($currentRef)\n" |  save --append $env.GITHUB_OUTPUT
+          echo $"baseRef=($baseRef)\n" |  save --append $env.GITHUB_OUTPUT
+      
+
+      - name: check pr is open ${{ steps.dl-pr-info.outputs.prNumber }}
+        shell: nu {0}
+        id: check-pr-open
+
+        run: |
+          use std log
+          ^pwd
+          ^ls -allh
+
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+                skipStepNames: ["checkHasNotMergeLabel"],
+                containStepNames: ["checkPROpen"]
+              } | to json )
+          do { nu $env.PR_NU_PATH GetMsgAndNotification "in_progress" } | ignore
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.get-head-ref.outputs.currentRef}}
+      - name: dl `codeowners`
+        shell: nu {0}
+
+        run: |
+          use std log
+          export-env {
+            $env.BRANCH_NAME = echo ${{ steps.get-head-ref.outputs.baseRef}}
+          }
+          nu $env.PR_NU_PATH cloneFile
+
+      - name: check all checks
+        id: check-all-checks
+        shell: nu {0}
+
+        run: |
+          use std log
+          ^pwd
+          ^ls -allh
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+                containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval"]
+              } | to json )
+          echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
+
+      - name: Prompt user to comment /queue
+        shell: nu {0}
+
+        run: |
+          use std log
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          let body = '
+            ✅ This PR has been approved.
+            ✅ This PR is synced with the base branch.
+            ✅ This PR no conflicts with the base branch.
+            ✅ This PR all checks passed.
+            ✅ Congratulations! PR is try to be merge.'
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" $"/repos/($env.GITHUB_REPOSITORY)/issues/($prNumber)/comments" -f $"body=($body)"
+
+      - name: Merge PR
+        if: steps.check-all-checks.outputs.approved == 'true'
+        shell: nu {0}
+
+        run: |
+          use std log
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+
+          nu $env.PR_NU_PATH checkAllChecks $prNumber ({
+                skipStepNames: ["checkHasNotMergeLabel"],
+                containStepNames: ["checkPROpen", "mergePR"]
+              } | to json )
+          echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
+      - name: check is auto-merge label
+        if: failure()
+        shell: nu {0}
+        run: |
+          use std log
+          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
+          if ($prNumber | is-empty) {
+            log info "No PR number found, skip check auto-merge label"
+            exit 0
+          }
+          let popPrInfoJson = $env | get -i POP_PR_INFO_JSON | default "" | into string
+          if ($popPrInfoJson | is-empty) {
+            log info "No POP_PR_INFO_JSON found, skip check auto-merge label"
+            exit 0
+          }
+          let popPrInfo = echo $popPrInfoJson | from json
+          if ($popPrInfo | get -i resource | default "" | into string) != "auto-merge-label" {
+            log info "No auto-merge label found, skip check auto-merge label"
+            exit 0
+          }
+          nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
+          log info "Added PR #($prNumber) to the queue."
+      - name: DL `pr/pr.yaml`
+        shell: nu {0}
+        if: always()
+        id: re-dl-pr-info
+
+        run: |
+          use std log
+          export-env {
+            $env.BRANCH_NAME = "gh-pr"
+            $env.DL_PATH = "pr/pr.yaml"
+            $env.REPOSITORY = ^echo ${{ github.repository }}
+          }
+          ^ls -allh
+          let prResultPath = nu $env.PR_NU_PATH DLRemoteFileExport true
+          log info ($prResultPath | to json -r)
+          ^cat $prResultPath
+          let prPath = open $prResultPath | from json | get -i tmpPath
+          let prInfo = open $prPath | from yaml | default []
+          if (($prInfo | length) == 0) {
+            log error "No PRs in queue."
+            echo  $"needContinuePopQueue=false" |  save --append $env.GITHUB_OUTPUT
+            exit 0
+          }
+          echo  $"needContinuePopQueue=true" |  save --append $env.GITHUB_OUTPUT
+
+      - name: need trigger pop queue?
+        shell: nu {0}
+        if: always()
+
+        run: |
+          use std log
+          let continuePopQueue = echo ${{ steps.re-dl-pr-info.outputs.needContinuePopQueue }}
+          if (($continuePopQueue | is-not-empty)  and ($continuePopQueue | into bool) == false) {
+            log warning "No need to trigger pop queue, continuePopQueue is empty"
+            return
+          }
+
+          let haveRunsInProcess = gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28"   /repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/runs?per_page=100 | from json | get -i workflow_runs | default [] | where {|x| $x.status == 'waiting' or $x.status == 'queued' or $x.status == 'in_progress' or $x.status == 'pending'}
+          if (($haveRunsInProcess | length) > 1) {
+            log warning "There are still runs in process, not trigger pop queue"
+            return
+          }
+          # pop queue
+          log info $"Continue ........Triggering pop queue workflow with ref: `${{env.TRIGGER_BRANCH_NAME}}`"
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/actions/workflows/($env.MergeQueueFileName)/dispatches -f "ref=${{env.TRIGGER_BRANCH_NAME}}"

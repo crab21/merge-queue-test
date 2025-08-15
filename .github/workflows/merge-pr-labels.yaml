@@ -27,7 +27,9 @@ jobs:
         shell: nu {0}
         run: |
           use std log
-          let objs = $env.GITHUB_EVENT_WORKFLOW_RUN
+          let objsEvent = $env.GITHUB_EVENT
+          print $objsEvent
+          let objs = $objsEvent |  get -i WORKFLOW_RUN
           print $objs
 
   #         use std

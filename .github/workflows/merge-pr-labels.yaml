@@ -62,7 +62,7 @@ jobs:
                 containStepNames: ["checkPROpen", "checkHasNotMergeLabel"]
               } | to json ) } | complete
           print $notMergeLabel
-          if ($notMergeLabel | get exit_code) < 0 {
+          if ($notMergeLabel | get exit_code) == 255 {
             #  remove the prNumber from the queue
             log info $"PR #($prNumber) has not merge label, skipping."
             $"process PR: #($prNumber)\n" | save -f $env.GITHUB_STEP_SUMMARY
@@ -84,7 +84,7 @@ jobs:
                 containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval","checkHasAutoMergeLabel"]
               } | to json ) } | complete
           print $autoMergeLabel
-          if ($autoMergeLabel | get exit_code) < 0 {
+          if ($autoMergeLabel | get exit_code) == 255 {
             exit 1
           }
           if ($autoMergeLabel | get exit_code) != 1 {
@@ -154,7 +154,7 @@ jobs:
                 containStepNames: ["checkPROpen", "checkHasNotMergeLabel",  "checkNeedUpdate",  "checkConflict", "checkMergeGatekeeper", "checkApproval","checkHasAutoMergeLabel"]
               } | to json ) } | complete
           print $autoMergeLabel
-          if ($autoMergeLabel | get exit_code) < 0 {
+          if ($autoMergeLabel | get exit_code) == 255 {
             exit 1
           }
           if ($autoMergeLabel | get exit_code) != 1 {

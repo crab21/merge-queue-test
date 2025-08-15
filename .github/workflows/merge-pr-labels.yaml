@@ -18,7 +18,7 @@ env:
 jobs:
   labeled-event:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: hustcer/setup-nu@main
         with:

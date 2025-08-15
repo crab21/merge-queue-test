@@ -1,0 +1,28 @@
+auto_merge_labels:
+  - "auto-merge"
+  - "automerge"
+  - "automerge-pr"
+  - "automerge-pull-request"
+  - "automerge-pullrequest"
+  - "automerge-pullrequest-pr"
+  - "automerge-pullrequest-prs"
+  - "automerge-prs"
+  - "automerge-requests"
+  - "automerge-requests-pr"
+  - "automerge-requests-pull-request"
+  - "WIP"
+do_not_merge_labels:
+  - "Do Not Merge"
+  - "do-not-merge"
+  - "do-not-automerge"
+  - "do-not-automerge-pr"
+  - "do-not-automerge-pull-request"
+  - "do-not-automerge-pullrequest"
+  - "do-not-automerge-pullrequest-pr"
+  - "do-not-automerge-pullrequest-prs"
+  - "do-not-automerge-prs"
+  - "do-not-automerge-requests"
+  - "do-not-automerge-requests-pr"
+  - "do-not-automerge-requests-pull-request"
+
+requiredTeamsOrOwners:

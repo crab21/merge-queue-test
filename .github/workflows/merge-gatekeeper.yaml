@@ -1,0 +1,17 @@
+name: Merge Gatekeeper
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  merge-gatekeeper:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: merge-gatekeeper-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: hustcer/setup-nu@main
+        with:
+          version: "0.105.1"

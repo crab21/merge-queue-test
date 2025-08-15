@@ -27,10 +27,7 @@ jobs:
         shell: nu {0}
         run: |
           use std log
-          let objsEvent = $env.GITHUB_EVENT
-          print $objsEvent
-          let objs = $objsEvent |  get -i WORKFLOW_RUN
-          print $objs
+          print (${{ github.event.workflow_run.pull_requests[0].number }} )
 
   #         use std
   #         # git clone --progress -v --depth 1 --filter=blob:none --no-checkout $'https://($env.GH_USER):($env.GH_TOKEN)@github.com/lotusflare/rhino.git' /tmp/tools o+e>| save -f /tmp/tools.log

@@ -1,6 +1,1 @@
-- number: '5'
-  ghType: 0
-  ref: test-5
-  runs_link: https://github.com/crab21/merge-queue-test/actions/runs/16990468460
-  resource: auto-merge-label
-  queueTime: '20250815125913'
+[]

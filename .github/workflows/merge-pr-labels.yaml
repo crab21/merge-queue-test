@@ -107,7 +107,7 @@ jobs:
 
   workflow-runs-event:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests != null
     steps:
       - uses: hustcer/setup-nu@main
         with:

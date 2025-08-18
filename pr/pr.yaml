@@ -1,9 +1,3 @@
-- number: '7'
-  ghType: 0
-  ref: test-8
-  runs_link: https://github.com/crab21/merge-queue-test/actions/runs/17016343140
-  resource: auto-merge-label
-  queueTime: '20250817034640'
 - number: '8'
   ghType: 0
   ref: test-9

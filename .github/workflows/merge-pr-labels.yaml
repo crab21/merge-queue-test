@@ -91,7 +91,7 @@ jobs:
             exit 0
           }
 
-          #  remove the prNumber from the queue
+          #  add the prNumber from the queue
           log info $"PR #($prNumber) has auto merge label, skipping."
           nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
           log info $"Added PR #($prNumber) to the queue."

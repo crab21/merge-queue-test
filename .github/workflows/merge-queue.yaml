@@ -184,28 +184,6 @@ jobs:
                 containStepNames: ["checkPROpen", "mergePR"]
               } | to json )
           echo  "approved=true" |  save --append $env.GITHUB_OUTPUT
-      - name: check is auto-merge label
-        if: failure()
-        shell: nu {0}
-        run: |
-          use std log
-          let prNumber = echo ${{ steps.dl-pr-info.outputs.prNumber }}
-          if ($prNumber | is-empty) {
-            log info "No PR number found, skip check auto-merge label"
-            exit 0
-          }
-          let popPrInfoJson = $env | get -i POP_PR_INFO_JSON | default "" | into string
-          if ($popPrInfoJson | is-empty) {
-            log info "No POP_PR_INFO_JSON found, skip check auto-merge label"
-            exit 0
-          }
-          let popPrInfo = echo $popPrInfoJson | from json
-          if ($popPrInfo | get -i resource | default "" | into string) != "auto-merge-label" {
-            log info "No auto-merge label found, skip check auto-merge label"
-            exit 0
-          }
-          nu $env.PR_NU_PATH addQueueToGitFile $prNumber ({resource: "auto-merge-label"} | to json -r)
-          log info "Added PR #($prNumber) to the queue."
       - name: DL `pr/pr.yaml`
         shell: nu {0}
         if: always()

@@ -4,3 +4,9 @@
   runs_link: https://github.com/crab21/merge-queue-test/actions/runs/17016343140
   resource: auto-merge-label
   queueTime: '20250817034640'
+- number: '8'
+  ghType: 0
+  ref: test-9
+  runs_link: https://github.com/crab21/merge-queue-test/actions/runs/17029717202
+  resource: auto-merge-label
+  queueTime: '20250818025355'
